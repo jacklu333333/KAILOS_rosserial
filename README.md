@@ -10,3 +10,5 @@
 0x76 --> Barometer: MS5637
 ```
 
+#### Notes
+1. The GPS can still be improved through SM76 parsing
