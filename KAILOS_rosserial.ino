@@ -5,6 +5,7 @@
 // #define SerialSpeed 2000000
 
 // #include <WiFiClientSecure.h>
+#include <TinyGPSPlus.h>
 #include "WiFi.h"
 #if 0
 const char* ssid     = "your-ssid";     // your network SSID (name of wifi network)
@@ -70,6 +71,7 @@ sensor_msgs::NavSatFix gps_msg;
 ros::Publisher GPS_Pub("/kailos_tag/fix", &gps_msg);
 bool pushGPS = false;
 SemaphoreHandle_t xBinarySemaphore;
+TinyGPSPlus gps;
 
 void setup()
 {
@@ -105,6 +107,47 @@ void setup()
     while (Serial2.available() == false)
         ;
     Serial.println(Serial2.readString());
+    Serial.println("Disable Echo");
+    Serial2.print("ATE0\r\n");
+    while (Serial2.available() == false)
+        ;
+    Serial.println(Serial2.readString());
+    Serial.println("------------------------------");
+
+    Serial.println("Trun on GPS");
+    Serial2.print("AT+CGPS=1,1\r\n");
+    while (Serial2.available() == false)
+        ;
+    Serial.println(Serial2.readString());
+    Serial.println("------------------------------");
+
+    Serial.println("Get First GPS INFO");
+    Serial2.print("AT+CGPSINFO\r\n");
+    while (Serial2.available() == false)
+        ;
+    Serial.println(Serial2.readString());
+    Serial.println("------------------------------");
+
+    Serial.println("Check NMEA mode");
+    Serial2.print("AT+CGPSNMEA?\r\n");
+    while (Serial2.available() == false)
+        ;
+    Serial.println(Serial2.readString());
+    Serial.println("------------------------------");
+
+    Serial.println("Set NMEA rate 10 hz");
+    Serial2.print("AT+CGPSNMEARATE=1\r\n");
+    while (Serial2.available() == false)
+        ;
+    Serial.println(Serial2.readString());
+    Serial.println("------------------------------");
+
+    Serial.println("Set NMEA Auto Report");
+    Serial2.print("AT+CGPSINFOCFG=2,31\r\n");
+    while (Serial2.available() == false)
+        ;
+    Serial.println(Serial2.readString());
+    Serial.println("------------------------------");
 
     /****************************** IMU ******************************/
     // Connection Checking
@@ -184,16 +227,16 @@ void setup()
         &Task1,    /* Task handle to keep track of created task */
         0);        /* pin task to core 0 */
     delay(500);
-    // xTaskCreatePinnedToCore(
-    //     Task2code, /* Task function. */
-    //     "Task2",   /* name of task. */
-    //     10000,     /* Stack size of task */
-    //     NULL,      /* parameter of the task */
-    //     2,         /* priority of the task */
-    //     &Task2,    /* Task handle to keep track of created task */
-    //     1);        /* pin task to core 1 */
-    // delay(500);
-
+    xTaskCreatePinnedToCore(
+        Task2code, /* Task function. */
+        "Task2",   /* name of task. */
+        10000,     /* Stack size of task */
+        NULL,      /* parameter of the task */
+        2,         /* priority of the task */
+        &Task2,    /* Task handle to keep track of created task */
+        1);        /* pin task to core 1 */
+    delay(500);
+    Serial2.readString();
     xSemaphoreGive(xBinarySemaphore);
 }
 void loop()
@@ -273,48 +316,52 @@ void Task1code(void *pvParameters) // the High fps sensors (>10)
 }
 void Task2code(void *pvParameters) // the Low fps sensors
 {
-    static char response[1024];
-    int count = 0;
-    char c;
     while (true)
     {
-        memset(response, NULL, sizeof(response));
-        Serial2.print("AT+CGPSINFO");
-        while (Serial2.available())
+        while (Serial2.available() == false)
+            ;
+
+        String NMEA_Info = Serial2.readString();
+        int start = 0;
+        // Serial.println("here");
+        // Serial.println(NMEA_Info);
+
+        while (start <= NMEA_Info.lastIndexOf("\n"))
         {
-            c = (char)Serial2.read();
-            if (c != '\r' && c != '\n' && c != '\0')
+            if (gps.encode(NMEA_Info.c_str()[start]))
+                if (gps.location.isValid())
+                    break;
+            start++;
+        }
+        // Serial.println("--------------------------------------");
+        if (gps.location.isValid())
+        {
+            if (xSemaphoreTake(xBinarySemaphore, 4) == pdTRUE)
             {
-                response[count] = c;
-                c = '\0';
-                count++;
+                gps_msg.header.stamp = nh.now();
+                gps_msg.position_covariance_type = -1;
+                // gps_msg.status.status=;
+                // gps_msg.status.service=;
+                gps_msg.latitude = gps.location.lat();
+                gps_msg.longitude = gps.location.lng();
+                gps_msg.altitude = gps.altitude.meters();
+
+                // gps_msg.position_covariance = []; //[9]
+                pushGPS = true;
+                // Serial.println("Before");
+                // GPS_Pub.publish(&gps_msg);
+                // Serial.println("After");
+                // Serial.println("Task 2 ");
+                xSemaphoreGive(xBinarySemaphore);
+            }
+            else
+            {
+                // Serial.println("Task 2 block");
             }
         }
-    }
-    if (xSemaphoreTake(xBinarySemaphore, 4) == pdTRUE)
-    {
-        gps_msg.header.stamp = nh.now();
-        gps_msg.position_covariance_type = -1;
-        // gps_msg.status.status=;
-        // gps_msg.status.service=;
-        gps_msg.latitude = 0;
-        gps_msg.longitude = 0;
-        gps_msg.altitude = 0;
 
-        // gps_msg.position_covariance = []; //[9]
-        pushGPS = true;
-        // Serial.println("Before");
-        // GPS_Pub.publish(&gps_msg);
-        // Serial.println("After");
-        // Serial.println("Task 2 ");
-        xSemaphoreGive(xBinarySemaphore);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
     }
-    else
-    {
-        // Serial.println("Task 2 block");
-    }
-
-    vTaskDelay(100 / portTICK_PERIOD_MS);
 }
 
 void print_calibration()
@@ -378,4 +425,59 @@ void MSG_setup()
     imu_mag_msg.header.frame_id = FRAME_ID;
 
     gps_msg.header.frame_id = FRAME_ID;
+}
+
+void displayInfo()
+{
+    Serial.print(F("Location: "));
+    if (gps.location.isValid())
+    {
+        Serial.print(gps.location.lat(), 6);
+        Serial.print(F(","));
+        Serial.print(gps.location.lng(), 6);
+    }
+    else
+    {
+        Serial.print(F("INVALID"));
+    }
+
+    Serial.print(F("  Date/Time: "));
+    if (gps.date.isValid())
+    {
+        Serial.print(gps.date.month());
+        Serial.print(F("/"));
+        Serial.print(gps.date.day());
+        Serial.print(F("/"));
+        Serial.print(gps.date.year());
+    }
+    else
+    {
+        Serial.print(F("INVALID"));
+    }
+
+    Serial.print(F(" "));
+    if (gps.time.isValid())
+    {
+        if (gps.time.hour() < 10)
+            Serial.print(F("0"));
+        Serial.print(gps.time.hour());
+        Serial.print(F(":"));
+        if (gps.time.minute() < 10)
+            Serial.print(F("0"));
+        Serial.print(gps.time.minute());
+        Serial.print(F(":"));
+        if (gps.time.second() < 10)
+            Serial.print(F("0"));
+        Serial.print(gps.time.second());
+        Serial.print(F("."));
+        if (gps.time.centisecond() < 10)
+            Serial.print(F("0"));
+        Serial.print(gps.time.centisecond());
+    }
+    else
+    {
+        Serial.print(F("INVALID"));
+    }
+
+    Serial.println();
 }

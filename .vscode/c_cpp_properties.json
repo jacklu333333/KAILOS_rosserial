@@ -92,6 +92,7 @@
                 "/home/jack/.arduino15/packages/esp32/hardware/esp32/1.0.6/tools/sdk/include/fb_gfx",
                 "/home/jack/.arduino15/packages/esp32/hardware/esp32/1.0.6/cores/esp32",
                 "/home/jack/.arduino15/packages/esp32/hardware/esp32/1.0.6/variants/esp32",
+                "/home/jack/Arduino/libraries/TinyGPSPlus-ESP32/src",
                 "/home/jack/.arduino15/packages/esp32/hardware/esp32/1.0.6/libraries/WiFi/src",
                 "/home/jack/.arduino15/packages/esp32/hardware/esp32/1.0.6/libraries/Wire/src",
                 "/home/jack/Arduino/libraries/Rosserial_Arduino_Library/src",
