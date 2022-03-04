@@ -184,8 +184,11 @@ void setup()
         saveCalibration();
     }
 
-    // load from eeprom
+    // load from eeprom for MPU
     loadCalibration();
+    // set declination to Daejeon, Korea (36.374454498291016° N, 	127.36531066894531° E) 2022 Feb. 24
+    mpu.setMagneticDeclination(8.52);
+
     Serial.println("Finished IMU Connection Setup");
     /****************************** Baro ******************************/
     // Connection Checking
@@ -286,9 +289,9 @@ void Task1code(void *pvParameters) // the High fps sensors (>10)
                 // Serial.println("Finished imu_6dof");
 
                 // MAG
-                imu_mag_msg.magnetic_field.x = mpu.getMagY() * 0.1;
-                imu_mag_msg.magnetic_field.y = mpu.getMagX() * 0.1;
-                imu_mag_msg.magnetic_field.z = mpu.getMagZ() * -0.1;
+                imu_mag_msg.magnetic_field.x = mpu.getMagY() * 0.0000001;
+                imu_mag_msg.magnetic_field.y = mpu.getMagX() * 0.0000001;
+                imu_mag_msg.magnetic_field.z = mpu.getMagZ() * -0.0000001;
 
                 imu_mag_msg.header.stamp = imu_imu_msg.header.stamp;
                 IMU_Mag.publish(&imu_mag_msg);
